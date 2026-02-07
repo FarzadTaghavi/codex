@@ -7,7 +7,6 @@ use chrono::DateTime;
 use chrono::Local;
 use codex_core::WireApi;
 use codex_core::config::Config;
-use codex_core::protocol::AskForApproval;
 use codex_core::protocol::NetworkAccess;
 use codex_core::protocol::SandboxPolicy;
 use codex_core::protocol::TokenUsage;
@@ -64,7 +63,9 @@ struct StatusHistoryCell {
     model_name: String,
     model_details: Vec<String>,
     directory: PathBuf,
-    permissions: String,
+    approval: String,
+    app_mcp_url: Option<String>,
+    sandbox: String,
     agents_summary: String,
     collaboration_mode: Option<String>,
     model_provider: Option<String>,
@@ -207,17 +208,6 @@ impl StatusHistoryCell {
                 }
             }
         };
-        let permissions = if config.approval_policy.value() == AskForApproval::OnRequest
-            && *config.sandbox_policy.get() == SandboxPolicy::new_workspace_write_policy()
-        {
-            "Default".to_string()
-        } else if config.approval_policy.value() == AskForApproval::Never
-            && *config.sandbox_policy.get() == SandboxPolicy::DangerFullAccess
-        {
-            "Full Access".to_string()
-        } else {
-            format!("Custom ({sandbox}, {approval})")
-        };
         let agents_summary = compose_agents_summary(config);
         let model_provider = format_model_provider(config);
         let account = compose_account_display(auth_manager, plan_type);
@@ -250,7 +240,9 @@ impl StatusHistoryCell {
             model_name,
             model_details,
             directory: config.cwd.clone(),
-            permissions,
+            approval,
+            app_mcp_url: config.apps_mcp_url.clone(),
+            sandbox,
             agents_summary,
             collaboration_mode: collaboration_mode.map(ToString::to_string),
             model_provider,
@@ -437,6 +429,9 @@ impl HistoryCell for StatusHistoryCell {
         let mut seen: BTreeSet<String> = labels.iter().cloned().collect();
         let thread_name = self.thread_name.as_deref().filter(|name| !name.is_empty());
 
+        if self.app_mcp_url.is_some() {
+            push_label(&mut labels, &mut seen, "App MCP URL");
+        }
         if self.model_provider.is_some() {
             push_label(&mut labels, &mut seen, "Model provider");
         }
@@ -496,7 +491,11 @@ impl HistoryCell for StatusHistoryCell {
             lines.push(formatter.line("Model provider", vec![Span::from(model_provider.clone())]));
         }
         lines.push(formatter.line("Directory", vec![Span::from(directory_value)]));
-        lines.push(formatter.line("Permissions", vec![Span::from(self.permissions.clone())]));
+        lines.push(formatter.line("Approval", vec![Span::from(self.approval.clone())]));
+        lines.push(formatter.line("Sandbox", vec![Span::from(self.sandbox.clone())]));
+        if let Some(app_mcp_url) = self.app_mcp_url.as_ref() {
+            lines.push(formatter.line("App MCP URL", vec![Span::from(app_mcp_url.clone())]));
+        }
         lines.push(formatter.line("Agents.md", vec![Span::from(self.agents_summary.clone())]));
 
         if let Some(account_value) = account_value {
