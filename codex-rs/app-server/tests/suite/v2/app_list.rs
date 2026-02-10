@@ -793,6 +793,7 @@ fn write_connectors_config(codex_home: &std::path::Path, base_url: &str) -> std:
             r#"
 chatgpt_base_url = "{base_url}"
 mcp_oauth_credentials_store = "file"
+apps_mcp_url = "{base_url}/api/codex/apps"
 
 [features]
 connectors = true
