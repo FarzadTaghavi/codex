@@ -67,8 +67,9 @@ fn codex_apps_mcp_http_headers(auth: Option<&CodexAuth>) -> Option<HashMap<Strin
     }
 }
 
-fn codex_apps_mcp_url(configured_url: Option<&str>) -> String {
+fn codex_apps_mcp_url(configured_url: Option<&str>, active_profile: Option<&str>) -> String {
     let base_url = configured_url
+        .filter(|_| active_profile == Some("dev"))
         .map(str::trim)
         .filter(|url| !url.is_empty())
         .unwrap_or(DEFAULT_CODEX_APPS_MCP_URL)
@@ -83,7 +84,10 @@ fn codex_apps_mcp_server_config(config: &Config, auth: Option<&CodexAuth>) -> Mc
     } else {
         codex_apps_mcp_http_headers(auth)
     };
-    let url = codex_apps_mcp_url(config.apps_mcp_url.as_deref());
+    let url = codex_apps_mcp_url(
+        config.apps_mcp_url.as_deref(),
+        config.active_profile.as_deref(),
+    );
 
     McpServerConfig {
         transport: McpServerTransportConfig::StreamableHttp {
@@ -383,7 +387,7 @@ mod tests {
     #[test]
     fn codex_apps_mcp_url_defaults_to_internal_endpoint() {
         assert_eq!(
-            codex_apps_mcp_url(None),
+            codex_apps_mcp_url(None, None),
             "https://connectorsapi.gateway.unified-0.api.openai.com/v1/connectors/mcp/"
         );
     }
@@ -391,12 +395,20 @@ mod tests {
     #[test]
     fn codex_apps_mcp_url_normalizes_custom_value() {
         assert_eq!(
-            codex_apps_mcp_url(Some("https://example.com/custom/path")),
+            codex_apps_mcp_url(Some("https://example.com/custom/path"), Some("dev")),
             "https://example.com/custom/path/"
         );
         assert_eq!(
-            codex_apps_mcp_url(Some("https://example.com/custom/path/")),
+            codex_apps_mcp_url(Some("https://example.com/custom/path/"), Some("dev")),
             "https://example.com/custom/path/"
+        );
+    }
+
+    #[test]
+    fn codex_apps_mcp_url_uses_default_for_non_dev_profile() {
+        assert_eq!(
+            codex_apps_mcp_url(Some("https://example.com/custom/path"), Some("prod")),
+            DEFAULT_CODEX_APPS_MCP_URL
         );
     }
 }
