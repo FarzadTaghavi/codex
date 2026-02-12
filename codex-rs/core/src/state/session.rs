@@ -183,10 +183,6 @@ impl SessionState {
         self.active_mcp_tool_selection = None;
     }
 
-    pub(crate) fn auto_continue(&self) -> &AutoContinueRuntimeState {
-        &self.auto_continue
-    }
-
     pub(crate) fn auto_continue_mut(&mut self) -> &mut AutoContinueRuntimeState {
         &mut self.auto_continue
     }
@@ -221,11 +217,15 @@ impl AutoContinueRuntimeState {
         state
     }
 
+    #[cfg(test)]
     pub(crate) fn config(&self) -> &AutoContinueConfig {
         &self.config
     }
 
     pub(crate) fn disable(&mut self, reason: AutoContinueStopReason) {
+        if !self.config.enabled {
+            return;
+        }
         self.config.enabled = false;
         self.last_stop_reason = Some(reason);
     }
@@ -239,12 +239,9 @@ impl AutoContinueRuntimeState {
         self.last_stop_reason = None;
     }
 
+    #[cfg(test)]
     pub(crate) fn turns_spawned(&self) -> u64 {
         self.turns_spawned
-    }
-
-    pub(crate) fn elapsed(&self) -> std::time::Duration {
-        self.started_at.elapsed()
     }
 
     pub(crate) fn decide(&mut self, last_agent_message: Option<&str>) -> AutoContinueDecision {
@@ -408,7 +405,6 @@ const AUTO_CONTINUE_INPUT_BLOCKED_PATTERNS: &[&str] = &[
     "i'm blocked until you",
     "i am blocked until you",
     "i need the",
-    "i need",
     "need the",
     "need you to",
     "please provide",
@@ -482,6 +478,16 @@ mod auto_continue_tests {
         let msg = "I cannot proceed without the sessions and config path. Please provide them to continue.";
         match runtime.decide(Some(msg)) {
             AutoContinueDecision::Stop(AutoContinueStopReason::AwaitingUserInput) => {}
+            other => panic!("unexpected decision: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn auto_continue_does_not_stop_on_generic_i_need_phrase() {
+        let mut runtime = AutoContinueRuntimeState::new(make_config());
+        let msg = "I need to inspect the remaining files before applying the fix.";
+        match runtime.decide(Some(msg)) {
+            AutoContinueDecision::Continue { prompt } => assert_eq!(prompt, "continue"),
             other => panic!("unexpected decision: {other:?}"),
         }
     }
@@ -561,6 +567,15 @@ mod auto_continue_tests {
         runtime.disable(AutoContinueStopReason::Interrupted);
         assert!(runtime.rearm_if_allowed());
         assert!(runtime.config().enabled);
+    }
+
+    #[test]
+    fn auto_continue_does_not_rearm_when_interrupted_while_disabled() {
+        let mut config = make_config();
+        config.enabled = false;
+        let mut runtime = AutoContinueRuntimeState::new(config);
+        runtime.disable(AutoContinueStopReason::Interrupted);
+        assert!(!runtime.rearm_if_allowed());
     }
 
     #[test]
